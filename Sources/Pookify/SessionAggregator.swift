@@ -34,11 +34,12 @@ enum SessionAggregator {
     static let permissionCap: TimeInterval = 7200
     // A "reasoning" session (thinking, or a tool that already finished) is only alive while there's
     // recent activity — a hook firing OR the turn writing to its transcript. Interrupting a turn
-    // (terminal Ctrl+C right after submit, an editor pause) fires no hook and stops the transcript,
-    // so once BOTH have been quiet this long the turn is dead and the island retracts. Sized above
-    // the largest observed gap between transcript writes during genuine work (~16s) so a real,
-    // slow think is never hidden by mistake.
-    static let reasoningIdleCap: TimeInterval = 20
+    // (terminal Ctrl+C, an editor pause) fires no hook and stops the transcript, so once BOTH have
+    // been quiet this long the turn is dead and the island retracts. Sized above the largest gap
+    // between transcript writes measured during genuine reasoning (~8s), with margin, so a real
+    // think is never hidden; if an unusually slow turn ever trips it, the next write re-opens the
+    // island within a couple seconds. Cancelling a request clears the island in about this long.
+    static let reasoningIdleCap: TimeInterval = 10
     // How long past its last update a session keeps the app alive (so it can quit when the VS
     // Code extension host — whose pid outlives closed sessions — is all that remains).
     static let appHold: TimeInterval = 300
