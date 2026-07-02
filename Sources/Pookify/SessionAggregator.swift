@@ -30,16 +30,14 @@ enum SessionAggregator {
     // a long test run) resumes with its label and turn clock intact.
     // A tool that is still running (toolEndsAt == 0) gets a long window; quiet reasoning
     // (thinking / a finished tool) goes idle much sooner; permission may legitimately sit.
-    static let runningToolCap: TimeInterval = 900
     static let permissionCap: TimeInterval = 7200
-    // A "reasoning" session (thinking, or a tool that already finished) is only alive while there's
-    // recent activity — a hook firing OR the turn writing to its transcript. Interrupting a turn
-    // (terminal Ctrl+C, an editor pause) fires no hook and stops the transcript, so once BOTH have
-    // been quiet this long the turn is dead and the island retracts. Sized above the largest gap
-    // between transcript writes measured during genuine reasoning (~8s), with margin, so a real
-    // think is never hidden; if an unusually slow turn ever trips it, the next write re-opens the
-    // island within a couple seconds. Cancelling a request clears the island in about this long.
-    static let reasoningIdleCap: TimeInterval = 10
+    // Backstop only. A cancelled turn is detected deterministically from the transcript's
+    // interruption marker (see `interruptedAt`), so this never fires in normal use — it exists
+    // purely to eventually clear a true zombie (a turn that died leaving no marker and no process
+    // exit, e.g. a fresh session cancelled within a second, before anything was written). It is
+    // deliberately generous so a genuinely long silent think is NEVER hidden: liveness counts both
+    // hook writes and transcript writes, and this only bites after neither has moved for this long.
+    static let workBackstopCap: TimeInterval = 900
     // How long past its last update a session keeps the app alive (so it can quit when the VS
     // Code extension host — whose pid outlives closed sessions — is all that remains).
     static let appHold: TimeInterval = 300
@@ -62,24 +60,26 @@ enum SessionAggregator {
         return m.timeIntervalSince1970
     }
 
-    /// The state a session effectively contributes right now (after the display caps).
+    /// The state a session effectively contributes right now.
+    ///
+    /// A cancelled turn is caught by `interruptedAt` (deterministic, no timeout). The only time
+    /// caps here are generous backstops for a zombie that left no marker: a working session stays
+    /// alive as long as EITHER a hook fired or the transcript was written within the backstop, so a
+    /// genuinely long silent think — which still streams to its transcript — is never hidden.
     static func effectiveState(_ s: SessionSnapshot, now: Double) -> AgentState {
-        // A hook firing (ts) OR the turn writing its transcript both count as "still alive".
-        func reasoningAlive() -> Bool {
-            now - max(s.ts, transcriptMTime(s)) <= reasoningIdleCap
+        func aliveWithin(_ cap: TimeInterval) -> Bool {
+            now - max(s.ts, transcriptMTime(s)) <= cap
         }
         switch s.state {
         case .thinking:
-            return reasoningAlive() ? .thinking : .idle
+            return aliveWithin(workBackstopCap) ? .thinking : .idle
         case .tool:
             // A finished tool (toolEndsAt > 0) lingers briefly so fast tools are visible, then the
             // session is back to reasoning — surface that as thinking, not a stale tool label.
             if s.toolEndsAt > 0 && now > s.toolEndsAt {
-                return reasoningAlive() ? .thinking : .idle
+                return aliveWithin(workBackstopCap) ? .thinking : .idle
             }
-            // A tool still running writes nothing to the transcript (a long build is silent), so it
-            // gets a long, plain window rather than the reasoning-liveness check.
-            return (now - s.ts > runningToolCap) ? .idle : .tool
+            return aliveWithin(workBackstopCap) ? .tool : .idle
         case .permission:
             return (now - s.ts > permissionCap) ? .idle : .permission
         case .done:
@@ -91,34 +91,53 @@ enum SessionAggregator {
         }
     }
 
-    /// True when the session's transcript ends with Claude Code's interruption marker — the user
-    /// hit stop/pause. Interrupts fire no hook, so this marker (plus the reasoning-liveness cap
-    /// above, for the fast Ctrl+C case where the transcript isn't even written) is how an
-    /// interrupted turn is noticed. Cheap: reads only the file's tail, only for busy sessions.
-    static func wasInterrupted(_ s: SessionSnapshot) -> Bool {
+    private static let iso = ISO8601DateFormatter()
+    private static let isoFrac: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter(); f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]; return f
+    }()
+
+    /// When the session's turn was interrupted, as a unix timestamp, or nil if it wasn't.
+    ///
+    /// Claude Code writes an interruption entry to the transcript on Ctrl+C / stop / a denied tool,
+    /// and fires NO hook for it. So the transcript is the source of truth. We scan the tail for the
+    /// newest such entry and return its timestamp; the caller compares it to the turn's start, so a
+    /// marker from a PRIOR turn is ignored and a fresh prompt naturally supersedes it. No timeout is
+    /// involved — a turn is interrupted the instant the marker lands, and never otherwise.
+    static func interruptedAt(_ s: SessionSnapshot) -> Double? {
         guard !s.transcript.isEmpty,
-              let fh = FileHandle(forReadingAtPath: s.transcript) else { return false }
+              let fh = FileHandle(forReadingAtPath: s.transcript) else { return nil }
         defer { try? fh.close() }
-        guard let size = try? fh.seekToEnd(), size > 0 else { return false }
-        let window: UInt64 = 16384
+        guard let size = try? fh.seekToEnd(), size > 0 else { return nil }
+        let window: UInt64 = 65536
         try? fh.seek(toOffset: size > window ? size - window : 0)
-        guard let data = try? fh.readToEnd(), !data.isEmpty else { return false }
-        let text = String(decoding: data, as: UTF8.self)   // lossy-safe at the cut boundary
-        guard let last = text.split(separator: "\n", omittingEmptySubsequences: true).last,
-              last.contains("Request interrupted by user"),   // cheap reject before JSON parse
-              // Precise check: only a real *user* interruption entry counts — not conversation
-              // text that merely mentions the phrase (e.g. someone discussing this feature).
-              let obj = try? JSONSerialization.jsonObject(with: Data(last.utf8)) as? [String: Any],
-              (obj["type"] as? String) == "user",
-              let message = obj["message"] as? [String: Any]
-        else { return false }
-        let marker = "[Request interrupted by user"
-        if let str = message["content"] as? String { return str.hasPrefix(marker) }
-        if let blocks = message["content"] as? [[String: Any]] {
-            return blocks.contains {
-                ($0["type"] as? String) == "text" && (($0["text"] as? String) ?? "").hasPrefix(marker)
+        guard let data = try? fh.readToEnd(), !data.isEmpty else { return nil }
+        let text = String(decoding: data, as: UTF8.self)
+        // Newest line last; scan backward for the first interruption entry.
+        for line in text.split(separator: "\n", omittingEmptySubsequences: true).reversed() {
+            guard isInterruptLine(line) else { continue }
+            guard let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  let ts = obj["timestamp"] as? String else { continue }
+            return (isoFrac.date(from: ts) ?? iso.date(from: ts))?.timeIntervalSince1970 ?? 0
+        }
+        return nil
+    }
+
+    /// Whether one transcript line is a genuine interruption entry. Mirrors the patterns Claude
+    /// Code writes (user "[Request interrupted…]" markers, an errored/interrupted tool result),
+    /// while a cheap substring pre-check keeps the common non-matching line fast.
+    private static func isInterruptLine<S: StringProtocol>(_ line: S) -> Bool {
+        if line.contains("Request interrupted by user"),
+           let obj = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+           (obj["type"] as? String) == "user" {
+            let marker = "[Request interrupted by user"
+            let c = (obj["message"] as? [String: Any])?["content"]
+            if let str = c as? String { return str.hasPrefix(marker) }
+            if let blocks = c as? [[String: Any]] {
+                return blocks.contains { ($0["type"] as? String) == "text"
+                    && (($0["text"] as? String) ?? "").hasPrefix(marker) }
             }
         }
+        if line.contains("\"interrupted\":true") { return true }
         return false
     }
 
@@ -135,11 +154,11 @@ enum SessionAggregator {
                 try? FileManager.default.removeItem(at: url)
                 continue
             }
-            // A busy-looking session whose transcript ends in the interruption marker was paused
-            // by the user (no hook fires for that in the VS Code extension): show it as idle so
-            // the island retracts promptly. The session file stays — the next prompt revives it.
-            let eff = effectiveState(snap, now: now)
-            if (eff.isWorking || eff == .permission), wasInterrupted(snap) {
+            // A turn interrupted (Ctrl+C / stop / denied tool) after it began is dead now — the
+            // transcript's interruption marker says so, with no hook and no timeout. Collapse it to
+            // idle so the island retracts within a poll; the file stays, and the next prompt (a
+            // newer startedAt) revives it. Done once per session here, off the hot path.
+            if snap.startedAt > 0, let it = interruptedAt(snap), it >= snap.startedAt - 2 {
                 snap.state = .idle
                 snap.startedAt = 0
                 snap.toolEndsAt = 0
