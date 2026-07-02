@@ -26,7 +26,7 @@ cd pookify
 
 This adds Pookify to your Applications and sets up Claude Code. Start a session and the island shows up on your notch.
 
-> On MacBooks without a notch, Pookify draws its own — the island looks and works the same.
+> On MacBooks without a notch, Pookify draws its own. The island looks and works the same.
 
 > **Build trouble?** Make sure Xcode's Command Line Tools are installed first: `xcode-select --install`
 
