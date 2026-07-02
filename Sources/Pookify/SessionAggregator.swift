@@ -60,6 +60,13 @@ enum SessionAggregator {
         return m.timeIntervalSince1970
     }
 
+    // How long a just-started turn gets to make its first transcript write. Claude Code persists
+    // the user's message within a few seconds of submit (measured ~4s worst case), so a "turn"
+    // that has produced NO transcript write this long after starting was killed before it took
+    // hold — the very-early Ctrl+C. Genuine turns clear this within seconds and are then immune
+    // (their transcript mtime is >= the turn start forever after), no matter how long they think.
+    static let firstWriteGrace: TimeInterval = 12
+
     /// The state a session effectively contributes right now.
     ///
     /// A cancelled turn is caught by `interruptedAt` (deterministic, no timeout). The only time
@@ -70,8 +77,18 @@ enum SessionAggregator {
         func aliveWithin(_ cap: TimeInterval) -> Bool {
             now - max(s.ts, transcriptMTime(s)) <= cap
         }
+        // A turn the transcript never acknowledged: it began at startedAt, the grace has passed,
+        // and no transcript write has landed at/after the start (an untouched or missing file).
+        // That's a Ctrl+C that beat the first flush — dead, not thinking. Self-healing: if a slow
+        // first write does land later, the condition stops holding and the island returns.
+        func turnNeverTookHold() -> Bool {
+            s.startedAt > 0
+                && now - s.startedAt > firstWriteGrace
+                && transcriptMTime(s) < s.startedAt - 2
+        }
         switch s.state {
         case .thinking:
+            if turnNeverTookHold() { return .idle }
             return aliveWithin(workBackstopCap) ? .thinking : .idle
         case .tool:
             // A finished tool (toolEndsAt > 0) lingers briefly so fast tools are visible, then the
