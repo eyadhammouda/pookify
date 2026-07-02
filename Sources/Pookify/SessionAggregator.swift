@@ -60,35 +60,23 @@ enum SessionAggregator {
         return m.timeIntervalSince1970
     }
 
-    // How long a just-started turn gets to make its first transcript write. Claude Code persists
-    // the user's message within a few seconds of submit (measured ~4s worst case), so a "turn"
-    // that has produced NO transcript write this long after starting was killed before it took
-    // hold — the very-early Ctrl+C. Genuine turns clear this within seconds and are then immune
-    // (their transcript mtime is >= the turn start forever after), no matter how long they think.
-    static let firstWriteGrace: TimeInterval = 12
-
     /// The state a session effectively contributes right now.
     ///
     /// A cancelled turn is caught by `interruptedAt` (deterministic, no timeout). The only time
     /// caps here are generous backstops for a zombie that left no marker: a working session stays
-    /// alive as long as EITHER a hook fired or the transcript was written within the backstop, so a
-    /// genuinely long silent think — which still streams to its transcript — is never hidden.
+    /// alive as long as EITHER a hook fired or the transcript was written within the backstop.
+    ///
+    /// Known limitation (intentionally not handled): a Ctrl+C in the very first second or two,
+    /// before Claude Code writes anything, leaves no signal at all — no hook, no transcript, no
+    /// marker — so that turn can only clear on the backstop. Detecting it would require a short
+    /// timeout that also hides genuinely long silent thinks, which is worse. A cancel mid-turn
+    /// (once there's output) is caught fast by the marker; this only affects the instant-undo case.
     static func effectiveState(_ s: SessionSnapshot, now: Double) -> AgentState {
         func aliveWithin(_ cap: TimeInterval) -> Bool {
             now - max(s.ts, transcriptMTime(s)) <= cap
         }
-        // A turn the transcript never acknowledged: it began at startedAt, the grace has passed,
-        // and no transcript write has landed at/after the start (an untouched or missing file).
-        // That's a Ctrl+C that beat the first flush — dead, not thinking. Self-healing: if a slow
-        // first write does land later, the condition stops holding and the island returns.
-        func turnNeverTookHold() -> Bool {
-            s.startedAt > 0
-                && now - s.startedAt > firstWriteGrace
-                && transcriptMTime(s) < s.startedAt - 2
-        }
         switch s.state {
         case .thinking:
-            if turnNeverTookHold() { return .idle }
             return aliveWithin(workBackstopCap) ? .thinking : .idle
         case .tool:
             // A finished tool (toolEndsAt > 0) lingers briefly so fast tools are visible, then the
