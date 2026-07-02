@@ -12,7 +12,8 @@ if argv.contains("--uninstall") {
 if argv.contains("--install") {
     let wired = HookInstaller.installAll()
     if wired.isEmpty {
-        print("No Claude Code config found to wire up.")
+        print("No Claude Code config found to wire up (is Claude Code installed?).")
+        print("Run `claude` once, then re-run ./scripts/install.sh — or just launch Pookify again.")
     } else {
         print("Wired Pookify into:\n" + wired.map { "  • \($0)" }.joined(separator: "\n"))
     }

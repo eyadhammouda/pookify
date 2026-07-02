@@ -98,7 +98,12 @@ enum HookInstaller {
         let key = "installedVersion"
         if UserDefaults.standard.string(forKey: key) == current { return nil }
         let wired = installAll()
-        UserDefaults.standard.set(current, forKey: key)
+        // Only record success once something was actually wired: if Claude Code isn't installed
+        // yet (~/.claude missing), keep trying on future launches, so installing Pookify first
+        // and Claude Code second still ends up connected.
+        if !wired.isEmpty {
+            UserDefaults.standard.set(current, forKey: key)
+        }
         return wired
     }
 
