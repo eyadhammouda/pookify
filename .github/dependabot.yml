@@ -1,0 +1,7 @@
+# Keep the GitHub Actions used by CI up to date (the project itself has zero dependencies).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

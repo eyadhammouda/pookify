@@ -123,7 +123,7 @@ play_story() {
   for step in "$@"; do
     IFS='|' read -r secs st label tool detail <<< "$step"
     case "$st" in
-      done) scene_state done "Done" "" 0 "" ;;
+      done) scene_state "done" "Done" "" 0 "" ;;
       error) scene_state error "Error" "" 0 "" ;;
       idle) write_idle ;;
       *)    scene_state "$st" "$label" "$tool" "$START" "$detail" ;;
@@ -196,7 +196,7 @@ resolve() {
     working)    STATE=tool; LABEL="Working…"; TOOL=SomeTool; AGO=12 ;;
     compacting) STATE=tool; LABEL="Compacting…"; AGO=5 ;;
     permission) STATE=permission; LABEL="Awaiting permission"; TOOL=Bash; AGO=0 ;;
-    done)       STATE=done; LABEL="Done"; AGO=0 ;;
+    done)       STATE="done"; LABEL="Done"; AGO=0 ;;
     error)      STATE=error; LABEL="Error"; AGO=0 ;;
     *) return 1 ;;
   esac
@@ -272,7 +272,7 @@ case "$cmd" in
     trap 'kill_sleep; exit 0' INT
     while true; do
       resolve running; write_state "$STATE" "$LABEL" "$TOOL" 5; sleep 3
-      resolve done;    write_state "$STATE" "$LABEL" "$TOOL" 0; sleep 2.5
+      resolve "done";  write_state "$STATE" "$LABEL" "$TOOL" 0; sleep 2.5
       write_idle; sleep 2.5
     done ;;
 

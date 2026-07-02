@@ -9,9 +9,13 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   build:
-    runs-on: macos-14
+    name: Build (macOS)
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -29,3 +33,20 @@ jobs:
           test -x build/Pookify.app/Contents/MacOS/Pookify
           test -x build/Pookify.app/Contents/MacOS/island-hook
           plutil -lint build/Pookify.app/Contents/Info.plist
+          # the notices must ship inside the bundle (license requirement)
+          test -f build/Pookify.app/Contents/Resources/THIRD_PARTY_NOTICES.md
+
+      - name: Smoke-test the hook helper
+        run: |
+          # island-hook must never fail or hang, even on garbage input
+          echo 'not json' | ./build/Pookify.app/Contents/MacOS/island-hook claude prompt
+          echo '{}' | ./build/Pookify.app/Contents/MacOS/island-hook claude stop
+          echo '{"session_id":"ci-test","cwd":"/tmp"}' | ./build/Pookify.app/Contents/MacOS/island-hook claude session-end
+
+  scripts:
+    name: Lint shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ShellCheck
+        run: shellcheck -S warning scripts/*.sh

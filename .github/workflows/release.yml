@@ -9,21 +9,31 @@ permissions:
 
 jobs:
   release:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
       - name: Build + package
         run: ./scripts/build.sh --zip
 
+      - name: Checksum
+        run: |
+          cd build
+          shasum -a 256 Pookify.zip > Pookify.zip.sha256
+          cat Pookify.zip.sha256
+
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          files: build/Pookify.zip
+          files: |
+            build/Pookify.zip
+            build/Pookify.zip.sha256
           generate_release_notes: true
           body: |
             A locally built app isn't quarantined, but a downloaded zip is. After downloading, run:
 
                 xattr -dr com.apple.quarantine "/Applications/Pookify.app"
 
-            See the README for install details.
+            See the README for install details. Verify the download with:
+
+                shasum -a 256 -c Pookify.zip.sha256
