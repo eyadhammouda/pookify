@@ -31,8 +31,14 @@ enum SessionAggregator {
     // A tool that is still running (toolEndsAt == 0) gets a long window; quiet reasoning
     // (thinking / a finished tool) goes idle much sooner; permission may legitimately sit.
     static let runningToolCap: TimeInterval = 900
-    static let workCap: TimeInterval = 300
     static let permissionCap: TimeInterval = 7200
+    // A "reasoning" session (thinking, or a tool that already finished) is only alive while there's
+    // recent activity — a hook firing OR the turn writing to its transcript. Interrupting a turn
+    // (terminal Ctrl+C right after submit, an editor pause) fires no hook and stops the transcript,
+    // so once BOTH have been quiet this long the turn is dead and the island retracts. Sized above
+    // the largest observed gap between transcript writes during genuine work (~16s) so a real,
+    // slow think is never hidden by mistake.
+    static let reasoningIdleCap: TimeInterval = 20
     // How long past its last update a session keeps the app alive (so it can quit when the VS
     // Code extension host — whose pid outlives closed sessions — is all that remains).
     static let appHold: TimeInterval = 300
@@ -45,17 +51,33 @@ enum SessionAggregator {
         return kill(pid, 0) == 0 || errno == EPERM
     }
 
+    /// Modification time of the session's transcript, or 0 if none. The turn writes to its
+    /// transcript continuously while alive, so this is a liveness signal that survives the gaps
+    /// between hooks; it freezes the instant a turn is interrupted.
+    static func transcriptMTime(_ s: SessionSnapshot) -> Double {
+        guard !s.transcript.isEmpty,
+              let attrs = try? FileManager.default.attributesOfItem(atPath: s.transcript),
+              let m = attrs[.modificationDate] as? Date else { return 0 }
+        return m.timeIntervalSince1970
+    }
+
     /// The state a session effectively contributes right now (after the display caps).
     static func effectiveState(_ s: SessionSnapshot, now: Double) -> AgentState {
+        // A hook firing (ts) OR the turn writing its transcript both count as "still alive".
+        func reasoningAlive() -> Bool {
+            now - max(s.ts, transcriptMTime(s)) <= reasoningIdleCap
+        }
         switch s.state {
         case .thinking:
-            return (now - s.ts > workCap) ? .idle : .thinking
+            return reasoningAlive() ? .thinking : .idle
         case .tool:
             // A finished tool (toolEndsAt > 0) lingers briefly so fast tools are visible, then the
             // session is back to reasoning — surface that as thinking, not a stale tool label.
             if s.toolEndsAt > 0 && now > s.toolEndsAt {
-                return (now - s.ts > workCap) ? .idle : .thinking
+                return reasoningAlive() ? .thinking : .idle
             }
+            // A tool still running writes nothing to the transcript (a long build is silent), so it
+            // gets a long, plain window rather than the reasoning-liveness check.
             return (now - s.ts > runningToolCap) ? .idle : .tool
         case .permission:
             return (now - s.ts > permissionCap) ? .idle : .permission
@@ -69,9 +91,9 @@ enum SessionAggregator {
     }
 
     /// True when the session's transcript ends with Claude Code's interruption marker — the user
-    /// hit stop/pause. The VS Code extension fires NO hook on interrupt (the terminal fires Stop),
-    /// so a working session whose transcript's final entry is the marker has actually been halted.
-    /// Cheap: reads only the file's tail, and only for sessions that claim to be busy.
+    /// hit stop/pause. Interrupts fire no hook, so this marker (plus the reasoning-liveness cap
+    /// above, for the fast Ctrl+C case where the transcript isn't even written) is how an
+    /// interrupted turn is noticed. Cheap: reads only the file's tail, only for busy sessions.
     static func wasInterrupted(_ s: SessionSnapshot) -> Bool {
         guard !s.transcript.isEmpty,
               let fh = FileHandle(forReadingAtPath: s.transcript) else { return false }
