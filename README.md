@@ -42,6 +42,16 @@ Right-click the island to switch between **Clawd** (the crab, default) and the *
 - ✅ Claude Code in the terminal
 - ✅ Claude Code in the VS Code extension
 
+## Update
+
+```bash
+cd pookify
+git pull
+./scripts/install.sh
+```
+
+Same command as installing — it rebuilds, replaces the app, and refreshes the hooks. If the island is on screen at that moment, right-click it → Quit once; the new version takes over from the next session.
+
 ## Uninstall
 
 ```bash
