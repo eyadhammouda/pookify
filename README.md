@@ -37,6 +37,14 @@ Right-click the island to switch between **Clawd** (the crab, default) and the *
 
 - ✅ Claude Code in the terminal
 - ✅ Claude Code in the VS Code extension
+- 
+## Uninstall
+
+```bash
+./scripts/uninstall.sh
+```
+
+Removes the app and its hooks. Your config backup (`settings.json.bak-pookify`) stays in place.
 
 ## How it works
 
@@ -46,13 +54,6 @@ The installer adds its hooks to `~/.claude/settings.json`, backs the file up fir
 
 To preview every state without running an agent, see [DEMO.md](DEMO.md).
 
-## Uninstall
-
-```bash
-./scripts/uninstall.sh
-```
-
-Removes the app and its hooks. Your config backup (`settings.json.bak-pookify`) stays in place.
 
 ## Limitations
 
