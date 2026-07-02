@@ -6,9 +6,6 @@
 
 The Claude Code dynamic Island for your MacBook.
 
-![macOS 14+](https://img.shields.io/badge/macOS-14+-333333)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-
 </div>
 
 
