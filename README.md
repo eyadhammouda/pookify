@@ -26,6 +26,8 @@ cd pookify
 
 This adds Pookify to your Applications and sets up Claude Code. Start a session and the island shows up on your notch.
 
+> **Requires a notched Mac** — a 14″/16″ MacBook Pro or a notched MacBook Air. Macs without a notch aren't supported.
+
 ## Claude icons
 
 Right-click the island to switch between **Clawd** (the crab, default) and the **Spark**.
@@ -57,7 +59,7 @@ To preview every state without running an agent, see [DEMO.md](DEMO.md).
 
 ## Limitations
 
-- The notch effect needs a notched Mac (14-inch or 16-inch MacBook Pro, or a notched MacBook Air). On other displays it shows a floating bar at the top center.
+- Pookify needs a notched Mac (14-inch or 16-inch MacBook Pro, or a notched MacBook Air). Macs without a notch aren't supported — on those it falls back to a floating top-center bar, which is untested.
 
 ## Privacy
 
