@@ -37,7 +37,7 @@ Right-click the island to switch between **Clawd** (the crab, default) and the *
 
 - ✅ Claude Code in the terminal
 - ✅ Claude Code in the VS Code extension
-- 
+
 ## Uninstall
 
 ```bash
