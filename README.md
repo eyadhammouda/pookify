@@ -32,13 +32,6 @@ Right-click the island to switch between **Clawd** (the crab, default) and the *
 
 <img src="docs/change-icon.gif" alt="Switching the Claude icon from the island's right-click menu" width="640">
 
-## What it shows
-
-- Working: the Claude mark animates with a live turn timer and the current activity — Thinking, Reading (with the file name), Editing, Running command, Searching, Browsing web, Planning, Delegating, Compacting, and more.
-- Awaiting permission: the island turns amber and opens so you notice it.
-- Done: a check, then it retracts into the notch.
-
-Several sessions fold into one island. A session waiting on your approval takes priority over one that is only working.
 
 ## Where it works
 
