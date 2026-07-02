@@ -85,7 +85,9 @@ struct IslandPill: View {
         (model.hovering || model.isExpanded) && !model.collapsing && !model.opening
     }
     private var closedH: CGFloat { model.topInset }
-    private var gap: CGFloat { model.hasNotch ? model.notchWidth : 18 }
+    // The camera gap: the physical notch's width, or the synthetic notch's on displays
+    // without one — the island renders identically either way.
+    private var gap: CGFloat { model.notchWidth }
     private var closedWidth: CGFloat { wing + gap + wing }
 
     private func textWidth(_ s: String, _ size: CGFloat, _ weight: NSFont.Weight) -> CGFloat {

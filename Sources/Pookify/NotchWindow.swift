@@ -89,10 +89,20 @@ final class NotchWindowController {
     }
 
     /// Feed the screen's notch geometry to the model so content can flank the camera correctly.
+    /// On displays without a physical notch, the island draws a synthetic one with real-notch
+    /// proportions, so it looks exactly the same everywhere.
+    /// Dev: ISLAND_FORCE_NO_NOTCH=1 exercises the synthetic path on a notched Mac.
     private func applyScreen(_ screen: NSScreen) {
-        model.topInset = screen.islandTopInset
-        model.notchWidth = screen.notchSize?.width ?? 18
-        model.hasNotch = screen.hasNotch
+        let forceNoNotch = ProcessInfo.processInfo.environment["ISLAND_FORCE_NO_NOTCH"] == "1"
+        if screen.hasNotch && !forceNoNotch {
+            model.topInset = screen.islandTopInset
+            model.notchWidth = screen.notchSize?.width ?? NSScreen.syntheticNotchWidth
+            model.hasNotch = true
+        } else {
+            model.topInset = screen.syntheticNotchHeight
+            model.notchWidth = NSScreen.syntheticNotchWidth
+            model.hasNotch = false
+        }
     }
 
     /// Panel covers the top strip of the screen, anchored to the very top so SwiftUI's top edge
@@ -111,10 +121,8 @@ final class NotchWindowController {
         let h = hosting.bounds.height
         let w = hosting.bounds.width
         // Match the pill's real footprint: its width plus a small hover margin, and its fully
-        // expanded height (notch band + drop-down). `max(…, 240)` keeps the zone usable on
-        // non-notched displays where the pill widens to fit the label.
-        let gap: CGFloat = model.hasNotch ? model.notchWidth : 18
-        let zoneWidth = max(Theme.wing + gap + Theme.wing, 240) + 32
+        // expanded height (notch band + drop-down).
+        let zoneWidth = Theme.wing + model.notchWidth + Theme.wing + 32
         let zoneHeight = model.topInset + Theme.dropHeight + 24
         // Top-centered box in bottom-left window coordinates.
         let rect = CGRect(x: (w - zoneWidth) / 2,

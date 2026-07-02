@@ -32,12 +32,17 @@ extension NSScreen {
                       height: size.height)
     }
 
-    /// Height to treat as the "notch" on a non-notched display: the menu bar height, so a
-    /// floating island sits where the notch would be.
+    /// Height to treat as the "notch" on a non-notched display. Real-notch proportions (~32pt,
+    /// like the 14" MacBook Pro), or the menu bar if it's taller, so the drawn notch reads
+    /// exactly like the hardware one.
     var syntheticNotchHeight: CGFloat {
         let menuBar = frame.maxY - visibleFrame.maxY   // includes the menu bar
-        return max(24, menuBar > 0 ? menuBar : 24)
+        return max(32, menuBar)
     }
+
+    /// Width of the synthetic notch drawn on non-notched displays: the 14" MacBook Pro's
+    /// physical notch width, so the island looks identical everywhere.
+    static let syntheticNotchWidth: CGFloat = 190
 
     /// Effective top inset where island content should begin (real notch height or menu bar).
     var islandTopInset: CGFloat { notchSize?.height ?? syntheticNotchHeight }

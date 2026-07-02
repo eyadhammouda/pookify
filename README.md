@@ -26,7 +26,7 @@ cd pookify
 
 This adds Pookify to your Applications and sets up Claude Code. Start a session and the island shows up on your notch.
 
-> **Works best on a notched MacBook.** On Macs without a notch it shows as a floating bar instead.
+> On MacBooks without a notch, Pookify draws its own — the island looks and works the same.
 
 > **Build trouble?** Make sure Xcode's Command Line Tools are installed first: `xcode-select --install`
 
@@ -61,7 +61,7 @@ To preview every state without running an agent, see [DEMO.md](DEMO.md).
 
 ## Limitations
 
-- Pookify works best on a notched Mac (14-inch or 16-inch MacBook Pro, or a notched MacBook Air), where the island fuses with the hardware. On Macs without a notch it falls back to a floating bar at the top center.
+- On a notched Mac (14-inch or 16-inch MacBook Pro, or a notched MacBook Air) the island fuses with the hardware notch. On Macs without one, Pookify draws a notch of the same proportions at the top of the screen, so the experience is the same.
 - Building from source needs Xcode's Command Line Tools (`xcode-select --install`).
 
 ## Privacy
