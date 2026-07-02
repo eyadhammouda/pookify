@@ -1,0 +1,24 @@
+# Swift / SwiftPM build artifacts
+.build/
+build/
+*.zip
+*.dmg
+Package.resolved
+
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Xcode (in case anyone opens it there)
+*.xcodeproj
+*.xcworkspace
+.swiftpm/
+
+# Cloned reference repos (third-party, not part of this project)
+reference/
+
+# Local notes
+demo.md
